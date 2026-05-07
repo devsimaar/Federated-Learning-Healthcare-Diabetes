@@ -1,39 +1,97 @@
-# utils.py
+# import flwr as fl
+
+# from sklearn.metrics import accuracy_score
+
+# from model import load_model
+# from utils import load_data
+
+
+# CLIENT_ID = int(input("Enter client ID (0 or 1): "))
+# NUM_CLIENTS = 2
+
+# X_train, X_test, y_train, y_test = load_data(
+#     CLIENT_ID,
+#     NUM_CLIENTS
+# )
+
+# model = load_model()
+
+
+# class FlowerClient(fl.client.NumPyClient):
+
+#     def get_parameters(self, config):
+#         return [model.coef_]
+
+#     def fit(self, parameters, config):
+
+#         model.fit(X_train, y_train)
+
+#         return [model.coef_], len(X_train), {}
+
+#     def evaluate(self, parameters, config):
+
+#         predictions = model.predict(X_test)
+
+#         accuracy = accuracy_score(
+#             y_test,
+#             predictions
+#         )
+
+#         loss = 1 - accuracy
+
+#         return loss, len(X_test), {
+#             "accuracy": accuracy
+#         }
+
+
+# fl.client.start_numpy_client(
+#     server_address="127.0.0.1:8080",
+#     client=FlowerClient(),
+# )
+
 import pandas as pd
 import torch
-from torch.utils.data import DataLoader, TensorDataset
+
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+from torch.utils.data import TensorDataset, DataLoader
 
-# Load and split the diabetes dataset for a specific client
-def load_data(client_id, num_clients=2):
-    # Read dataset
-    df = pd.read_csv("diabetes.csv")
 
-    # Features and labels
+def load_data(client_id, num_clients):
+
+    df = pd.read_csv("backend/diabetes.csv")
+
     X = df.drop("Outcome", axis=1).values
-    y = df["Outcome"].values.reshape(-1, 1)
+    y = df["Outcome"].values
 
-    # Standardize features
-    scaler = StandardScaler()
-    X = scaler.fit_transform(X)
+    X = torch.tensor(X, dtype=torch.float32)
+    y = torch.tensor(y, dtype=torch.float32)
 
-    # Train-test split (same for all clients)
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X,
+        y,
+        test_size=0.2,
+        random_state=42
+    )
 
-    # Divide training data among clients
-    chunk_size = len(X_train) // num_clients
-    start = client_id * chunk_size
-    end = (client_id + 1) * chunk_size if client_id < num_clients - 1 else len(X_train)
+    train_dataset = TensorDataset(
+        X_train,
+        y_train
+    )
 
-    # Each client gets a portion of the data
-    X_client = X_train[start:end]
-    y_client = y_train[start:end]
+    test_dataset = TensorDataset(
+        X_test,
+        y_test
+    )
 
-    # Convert to PyTorch DataLoader
-    trainset = TensorDataset(torch.tensor(X_client, dtype=torch.float32),
-                             torch.tensor(y_client, dtype=torch.float32))
-    testset = TensorDataset(torch.tensor(X_test, dtype=torch.float32),
-                            torch.tensor(y_test, dtype=torch.float32))
+    trainloader = DataLoader(
+        train_dataset,
+        batch_size=16,
+        shuffle=True
+    )
 
-    return DataLoader(trainset, batch_size=16, shuffle=True), DataLoader(testset, batch_size=16)
+    testloader = DataLoader(
+        test_dataset,
+        batch_size=16
+    )
+
+    return trainloader, testloader
